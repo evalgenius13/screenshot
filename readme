@@ -1,0 +1,22 @@
+# Screenshot Manager App — Phase 1: Setup & Import
+
+## Requirements
+- Mac mini (M4 or later)
+- Xcode 15+ (SwiftUI recommended)
+- iOS Simulator or physical device (iOS 15+)
+
+## Setup
+1. Clone repo or `git init`
+2. Open project in Xcode
+3. Build & run on simulator/device
+
+## Features (Phase 1)
+- TabBar navigation (Home, Categories, Search, Settings)
+- Request Photos permission
+- List screenshots from Photos album
+- Import metadata (id, date, thumbnail)
+- Store in Core Data (Screenshot entity)
+- Settings: toggle background import, clear cache
+
+## Next Steps
+Proceed to Phase 2: OCR & Categorization
