@@ -27,7 +27,7 @@ const CATEGORIES = [
   "Other"
 ]
 
-// 🔹 Strip common social UI clutter but KEEP hashtags
+// 🔹 Strip common social media UI clutter but KEEP hashtags
 const socialUIPatterns = [
   /\d+•\s*Sp\s*Your story Live/gi,
   /\d+\s*hours ago/gi,
@@ -99,13 +99,15 @@ Text: """${cleanText}"""
 
     console.log("⏱ GPT classify duration:", Date.now() - start, "ms")
 
-    const category = response.choices[0].message?.content?.trim() || "Other"
+    // ✅ Whitelist validation
+    let category = response.choices[0].message?.content?.trim() || "Other"
+    const validCategory = CATEGORIES.includes(category) ? category : "Other"
 
     console.log("⏱ Total request duration:", Date.now() - requestStart, "ms")
     console.log("🔍 Input length:", cleanText.length, "chars")
-    console.log("✅ Classified:", category)
+    console.log("✅ Classified:", validCategory)
 
-    res.status(200).json({ category })
+    res.status(200).json({ category: validCategory })
   } catch (err: any) {
     console.error("❌ classify API error:", err.response?.data || err.message)
     res.status(500).json({ error: 'OpenAI request failed' })
