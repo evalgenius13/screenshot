@@ -1,53 +1,75 @@
-//
-//  CategoriesView.swift
-//  Screenshot
-//
-
 import SwiftUI
-import CoreData
+
+func categoryCover(for category: String) -> Image {
+    let name = category.lowercased()
+    return Image(name) // loads from Assets.xcassets
+}
 
 struct CategoriesView: View {
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \ScreenshotEntity.category, ascending: true)],
-        animation: .default
-    ) private var screenshots: FetchedResults<ScreenshotEntity>
-    
-    var grouped: [String: [ScreenshotEntity]] {
-        Dictionary(grouping: screenshots, by: { $0.category ?? "Other" })
-    }
-    
+    let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+
     var body: some View {
         NavigationView {
-            List {
-                ForEach(grouped.keys.sorted(), id: \.self) { category in
-                    Section(header: Text(category)) {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack {
-                                ForEach(grouped[category] ?? []) { shot in
-                                    if let data = shot.thumbnail, let uiImage = UIImage(data: data) {
-                                        NavigationLink(destination: ScreenshotViewer(screenshot: shot)) {
-                                            Image(uiImage: uiImage)
-                                                .resizable()
-                                                .scaledToFill()
-                                                .frame(width: 100, height: 100)
-                                                .clipped()
-                                                .cornerRadius(6)
-                                        }
-                                    }
-                                }
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 16) {
+                    ForEach(CATEGORY_LIST, id: \.self) { category in
+                        NavigationLink(destination: ScreenshotCategoryGrid(category: category)) {
+                            VStack {
+                                categoryCover(for: category)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 60, height: 60)
+                                    .cornerRadius(8)
+                                Text(category)
+                                    .font(.caption)
+                                    .foregroundColor(.primary)
                             }
-                            .padding(.vertical, 4)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color(.secondarySystemBackground))
+                            .cornerRadius(12)
                         }
                     }
                 }
+                .padding()
             }
             .navigationTitle("Categories")
         }
     }
 }
 
-#Preview {
-    CategoriesView()
-        .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
-}
+struct ScreenshotCategoryGrid: View {
+    let category: String
+    @FetchRequest var screenshots: FetchedResults<ScreenshotEntity>
 
+    init(category: String) {
+        self.category = category
+        _screenshots = FetchRequest(
+            entity: ScreenshotEntity.entity(),
+            sortDescriptors: [NSSortDescriptor(keyPath: \ScreenshotEntity.date, ascending: false)],
+            predicate: NSPredicate(format: "category == %@", category)
+        )
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                ForEach(screenshots, id: \.objectID) { screenshot in
+                    if let imageData = screenshot.thumbnail,
+                       let uiImage = UIImage(data: imageData) {
+                        NavigationLink(destination: ScreenshotDetailView(screenshot: screenshot)) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 150, height: 150)
+                                .clipped()
+                                .cornerRadius(8)
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+        .navigationTitle(category)
+    }
+}
