@@ -28,22 +28,27 @@ const CATEGORIES = [
 ]
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const requestStart = Date.now();
+  const requestStart = Date.now()
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' })
   }
 
   try {
-    // Body parsing: Vercel may give a string or object
+    // 🔹 Normalize body (fix parse error)
     let body: any = req.body;
     if (typeof body === "string") {
-      body = JSON.parse(body);
+      try {
+        body = JSON.parse(body);
+      } catch {
+        return res.status(400).json({ error: "Invalid JSON body" });
+      }
     }
+
     const { text } = body;
 
-    if (!text || typeof text !== "string") {
-      return res.status(400).json({ error: 'No text provided' });
+    if (!text) {
+      return res.status(400).json({ error: "No text provided" })
     }
 
     const prompt = `
@@ -55,26 +60,23 @@ Rules:
 - If multiple categories could apply, choose the closest match.
 - If nothing fits, return "Other".
 Text: """${text}"""
-`;
+`
 
-    const start = Date.now();
-
+    const start = Date.now()
     const response = await client.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',  // ✅ use mini for speed, switch to gpt-4o for MVP demo
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 10,
       temperature: 0
-    });
+    })
+    console.log("⏱ GPT classify duration:", Date.now() - start, "ms")
 
-    console.log("⏱ GPT classify duration:", Date.now() - start, "ms");
+    const category = response.choices[0].message?.content?.trim() || "Other"
+    console.log("⏱ Total request duration:", Date.now() - requestStart, "ms")
 
-    const category = response.choices?.[0]?.message?.content?.trim() || "Other";
-
-    console.log("⏱ Total request duration:", Date.now() - requestStart, "ms");
-
-    res.status(200).json({ category });
+    res.status(200).json({ category })
   } catch (err: any) {
-    console.error("❌ classify API error:", err?.response?.data || err?.message || err);
-    res.status(500).json({ error: 'OpenAI request failed' });
+    console.error("❌ classify API error:", err.response?.data || err.message)
+    res.status(500).json({ error: 'OpenAI request failed' })
   }
 }
