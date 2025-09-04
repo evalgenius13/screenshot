@@ -1,76 +1,66 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+import OpenAI from 'openai'
 
-const BASE_CATEGORIES = [
-  "Meme",
-  "Quote",
-  "News",
-  "Promotion",
-  "Personal",
-];
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+})
 
-// 🔹 You can extend this list without touching iOS code
-const CUSTOM_CATEGORIES = [
+const CATEGORIES = [
+  "Food & Recipes",
+  "Fashion & Style",
+  "Fitness & Health",
+  "Home & Decor",
+  "Beauty",
+  "Travel",
+  "Quotes & Motivation",
+  "Business & Career",
+  "Relationships & Dating",
+  "Entertainment",
+  "Finance",
+  "Education",
+  "Parenting",
+  "Pets",
+  "Technology",
+  "Art & Creativity",
+  "Music",
   "Sports",
-  "MusicProduction",
-];
+  "Other"
+]
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
   }
 
   try {
-    const { text } = req.body;
+    const { text } = req.body
 
-    if (!text || typeof text !== "string") {
-      return res.status(400).json({ error: "Missing text" });
+    if (!text) {
+      return res.status(400).json({ error: 'No text provided' })
     }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY!}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `
-You are a screenshot classifier.
-
-Known categories:
-${BASE_CATEGORIES.join(", ")}, ${CUSTOM_CATEGORIES.join(", ")}
+    const prompt = `
+Classify the following social media post into ONE of these categories:
+${CATEGORIES.join(", ")}
 
 Rules:
-1. If text clearly matches one of the known categories, return that.
-2. If text contains a username, handle, or brand (e.g. "justwomenssports"), return that exact name as the category.
-3. If text references sports teams, games, scores → return Sports.
-4. If text references music software, FL Studio, DAWs, instruments → return MusicProduction.
-5. If nothing fits, return "Other".
-6. Always return exactly ONE short category name, no sentences.
-            `,
-          },
-          { role: "user", content: text },
-        ],
-        max_tokens: 10,
-      }),
-    });
+- Always return exactly one category string, no sentences.
+- If multiple categories could apply, choose the closest match.
+- If nothing fits, return "Other".
+Text: """${text}"""
+    `
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ OpenAI API error:", errorText);
-      return res.status(500).json({ category: "Other", error: "OpenAI API error" });
-    }
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o',   // 🔹 Full GPT-4o for MVP (best quality)
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 10,
+      temperature: 0
+    })
 
-    const data = await response.json();
-    const category =
-      data.choices?.[0]?.message?.content?.trim() || "Other";
-
-    res.status(200).json({ category });
-  } catch (err) {
-    console.error("❌ classify API error:", err);
-    res.status(500).json({ category: "Other", error: "Classification failed" });
+    const category = response.choices[0].message?.content?.trim() || "Other"
+    res.status(200).json({ category })
+  } catch (err: any) {
+    console.error("❌ classify API error:", err.message)
+    res.status(500).json({ error: 'Internal server error' })
   }
 }
