@@ -34,9 +34,11 @@ Base categories:
 - Promotion
 
 Rules:
-1. If text clearly matches one of the base categories, return that.
-2. If not, create a short dynamic category (e.g. brand, username, topic).
-3. Always return ONE category name only, no explanations.
+1. If the text clearly matches one of the base categories, return that.
+2. If the text contains a username, brand, or account (e.g. "justwomenssports"),
+   return that as the category.
+3. If nothing fits, return "Other".
+4. Always return exactly ONE short category name, no sentences or explanations.
             `,
           },
           { role: "user", content: text },
@@ -44,6 +46,12 @@ Rules:
         max_tokens: 10,
       }),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ OpenAI API error:", errorText);
+      return res.status(500).json({ category: "Other", error: "OpenAI API error" });
+    }
 
     const data = await response.json();
     const category =
