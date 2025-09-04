@@ -1,5 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
+const BASE_CATEGORIES = [
+  "Meme",
+  "Quote",
+  "News",
+  "Promotion",
+  "Personal",
+];
+
+// 🔹 You can extend this list without touching iOS code
+const CUSTOM_CATEGORIES = [
+  "Sports",
+  "MusicProduction",
+];
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -26,19 +40,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             content: `
 You are a screenshot classifier.
 
-Base categories:
-- Meme
-- Quote
-- News
-- Personal
-- Promotion
+Known categories:
+${BASE_CATEGORIES.join(", ")}, ${CUSTOM_CATEGORIES.join(", ")}
 
 Rules:
-1. If the text clearly matches one of the base categories, return that.
-2. If the text contains a username, brand, or account (e.g. "justwomenssports"),
-   return that as the category.
-3. If nothing fits, return "Other".
-4. Always return exactly ONE short category name, no sentences or explanations.
+1. If text clearly matches one of the known categories, return that.
+2. If text contains a username, handle, or brand (e.g. "justwomenssports"), return that exact name as the category.
+3. If text references sports teams, games, scores → return Sports.
+4. If text references music software, FL Studio, DAWs, instruments → return MusicProduction.
+5. If nothing fits, return "Other".
+6. Always return exactly ONE short category name, no sentences.
             `,
           },
           { role: "user", content: text },
