@@ -27,6 +27,28 @@ const CATEGORIES = [
   "Other"
 ]
 
+// 🔹 Strip common social UI clutter but KEEP hashtags
+const socialUIPatterns = [
+  /\d+•\s*Sp\s*Your story Live/gi,
+  /\d+\s*hours ago/gi,
+  /Liked by .* and \d+ others/gi,
+  /Add comment.*/gi,
+  /Your story/gi,
+  /Instagram/gi,
+  /Facebook/gi,
+  /Twitter/gi,
+  /Reply/gi,
+  /Repost/gi
+]
+
+function cleanOCR(text: string): string {
+  let cleaned = text
+  socialUIPatterns.forEach(p => {
+    cleaned = cleaned.replace(p, '')
+  })
+  return cleaned.trim()
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requestStart = Date.now()
 
@@ -35,44 +57,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 🔹 Normalize body (fix parse error)
-    let body: any = req.body;
-    if (typeof body === "string") {
+    // Normalize body (fix parse errors on Vercel)
+    let body: any = req.body
+    if (typeof body === 'string') {
       try {
-        body = JSON.parse(body);
+        body = JSON.parse(body)
       } catch {
-        return res.status(400).json({ error: "Invalid JSON body" });
+        return res.status(400).json({ error: 'Invalid JSON body' })
       }
     }
 
-    const { text } = body;
-
-    if (!text) {
-      return res.status(400).json({ error: "No text provided" })
+    const { text } = body
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Invalid or missing text' })
     }
+
+    // Clean OCR input
+    const cleanText = cleanOCR(text)
 
     const prompt = `
 Classify the following social media post into ONE of these categories:
 ${CATEGORIES.join(", ")}
 
 Rules:
-- Always return exactly one category string, no sentences.
-- If multiple categories could apply, choose the closest match.
+- Focus on the main content (captions, hashtags, or quotes).
+- Ignore usernames, likes, timestamps, and app UI elements.
+- Pay special attention to hashtags as strong category signals (e.g. #fitness, #ootd, #foodie).
+- Return exactly one category from the list above.
 - If nothing fits, return "Other".
-Text: """${text}"""
+
+Text: """${cleanText}"""
 `
 
     const start = Date.now()
     const response = await client.chat.completions.create({
-      model: 'gpt-4o-mini',  // ✅ use mini for speed, switch to gpt-4o for MVP demo
+      model: 'gpt-4o',   // ✅ best accuracy for MVP
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 10,
       temperature: 0
     })
+
     console.log("⏱ GPT classify duration:", Date.now() - start, "ms")
 
     const category = response.choices[0].message?.content?.trim() || "Other"
+
     console.log("⏱ Total request duration:", Date.now() - requestStart, "ms")
+    console.log("🔍 Input length:", cleanText.length, "chars")
+    console.log("✅ Classified:", category)
 
     res.status(200).json({ category })
   } catch (err: any) {
