@@ -1,5 +1,20 @@
 import Foundation
 
+let CATEGORY_LIST: [String] = [
+    "Food",
+    "Fashion",
+    "Home",
+    "Beauty",
+    "Fitness",
+    "Education",
+    "Quotes",
+    "Music",
+    "Entertainment",
+    "Art",
+    "Travel",
+    "Other"
+]
+
 struct Category: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
@@ -17,6 +32,7 @@ class CategoryStore: ObservableObject {
         loadAssignments()
     }
 
+    // These methods remain for persistence but users can’t add categories anymore.
     func addCategory(name: String) {
         let newCategory = Category(name: name)
         categories.append(newCategory)
