@@ -8,6 +8,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { text } = req.body;
 
+    if (!text || typeof text !== "string") {
+      return res.status(400).json({ error: "Missing text" });
+    }
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -19,8 +23,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         messages: [
           {
             role: "system",
-            content:
-              "You are a screenshot classifier. Categories: Meme, Quote, News, Personal, Promotion, Other. Classify the following text into ONE category.",
+            content: `
+You are a screenshot classifier.
+
+Base categories:
+- Meme
+- Quote
+- News
+- Personal
+- Promotion
+
+Rules:
+1. If text clearly matches one of the base categories, return that.
+2. If not, create a short dynamic category (e.g. brand, username, topic).
+3. Always return ONE category name only, no explanations.
+            `,
           },
           { role: "user", content: text },
         ],
@@ -34,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(200).json({ category });
   } catch (err) {
-    console.error(err);
+    console.error("❌ classify API error:", err);
     res.status(500).json({ category: "Other", error: "Classification failed" });
   }
 }
