@@ -3,34 +3,60 @@ import CoreData
 
 struct CategoryDetailView: View {
     let category: CategoryEntity
-    @Environment(\.managedObjectContext) private var context
-
-    var screenshots: [ScreenshotEntity] {
-        (category.screenshots as? Set<ScreenshotEntity>)?.sorted {
-            ($0.date ?? Date()) > ($1.date ?? Date())
-        } ?? []
-    }
+    @State private var selectedIndex: Int? = nil
 
     var body: some View {
+        let shots = (category.screenshots as? Set<ScreenshotEntity>)?
+            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) } ?? []
+
         ScrollView {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(screenshots, id: \.objectID) { shot in
-                    if let data = shot.thumbnail, let uiImage = UIImage(data: data) {
-                        NavigationLink(destination: ScreenshotDetailView(screenshot: shot)) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
+                ForEach(shots.indices, id: \.self) { index in
+                    let shot = shots[index]
+                    ZStack(alignment: .topLeading) {
+                        if let data = shot.thumbnail,
+                           let uiImage = UIImage(data: data) {
                             Image(uiImage: uiImage)
                                 .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(height: 160)
+                                .scaledToFill()
+                                .frame(height: 140)
                                 .clipped()
-                                .cornerRadius(8)
+                                .onTapGesture { selectedIndex = index }
+                        } else {
+                            Rectangle()
+                                .fill(Color.secondary.opacity(0.2))
+                                .frame(height: 140)
+                        }
+
+                        if shot.status == "pending" {
+                            Text("Scanning…")
+                                .font(.caption2)
+                                .padding(4)
+                                .background(Color.yellow.opacity(0.8))
+                                .cornerRadius(6)
+                                .padding(6)
                         }
                     }
                 }
             }
-            .padding()
         }
         .navigationTitle(category.name ?? "Category")
-        .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { selectedIndex != nil },
+                set: { if !$0 { selectedIndex = nil } }
+            )
+        ) {
+            if let i = selectedIndex {
+                ScreenshotPreviewView(
+                    screenshots: shots,
+                    selectedIndex: Binding(
+                        get: { i },
+                        set: { selectedIndex = $0 }
+                    )
+                )
+            }
+        }
     }
 }
 

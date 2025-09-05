@@ -18,10 +18,12 @@ extension ScreenshotEntity {
 
     @NSManaged public var category: String?
     @NSManaged public var date: Date?
-    @NSManaged public var id: String?
+    @NSManaged public var id: UUID?
     @NSManaged public var ocrText: String?
     @NSManaged public var thumbnail: Data?
     @NSManaged public var fullImagePath: String?
+    @NSManaged public var status: String?
+    @NSManaged public var assetIdentifier: String?
     @NSManaged public var folder: CategoryEntity?
 
 }

@@ -25,10 +25,14 @@ class OCRCategorizer {
             }
 
             let observations = request.results as? [VNRecognizedTextObservation] ?? []
-            let recognizedText = observations
+            let rawText = observations
                 .compactMap { $0.topCandidates(1).first?.string }
                 .joined(separator: " ")
 
+            // ✅ Clean out jibberish
+            let recognizedText = cleanOCRText(rawText)
+
+            // Use simple fallback categorizer
             let category = categorize(text: recognizedText)
             let result = OCRResult(text: recognizedText, category: category)
             completion(result)
@@ -46,12 +50,22 @@ class OCRCategorizer {
         }
     }
 
-    // Keep the original rule-based categorizer but expose a simple public API for fallbacks
+    // MARK: - Text Cleaning
+    private static func cleanOCRText(_ text: String) -> String {
+        // 1. Strip non-alphanumeric (except punctuation & space)
+        let pattern = "[^a-zA-Z0-9\\s.,!?-]"
+        let cleaned = text.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
+
+        // 2. Collapse multiple spaces
+        return cleaned.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                      .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Simple Fallback Categorizer
     static func simpleCategorize(_ text: String) -> String {
         return categorize(text: text)
     }
 
-    // Internal rules remain the same
     private static func categorize(text: String) -> String {
         let lower = text.lowercased()
         if lower.contains("recipe") || lower.contains("tsp") || lower.contains("cup") {
@@ -67,3 +81,4 @@ class OCRCategorizer {
         }
     }
 }
+

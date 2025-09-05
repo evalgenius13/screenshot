@@ -1,41 +1,48 @@
 import UIKit
-import CoreImage
+import ImageIO
 
-/// Utility to detect if a screenshot thumbnail is too dark or too flat.
-func isDarkOrFlat(_ image: UIImage) -> Bool {
-    guard let cgImage = image.cgImage else { return true }
-    let ciImage = CIImage(cgImage: cgImage)
-    let extent = ciImage.extent
-    let context = CIContext(options: [.useSoftwareRenderer: false])
-
-    guard let filter = CIFilter(
-        name: "CIAreaAverage",
-        parameters: [
-            kCIInputImageKey: ciImage,
-            kCIInputExtentKey: CIVector(cgRect: extent)
+extension UIImage {
+    /// Downscale image data before decoding, for smooth scrolling & previews.
+    static func downscaled(from data: Data, maxDimension: CGFloat) -> UIImage? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxDimension
         ]
-    ),
-    let output = filter.outputImage else {
-        return true
+
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return UIImage(data: data) // fallback to full decode
+        }
+
+        return UIImage(cgImage: cgImage)
     }
 
-    var bitmap = [UInt8](repeating: 0, count: 4)
-    context.render(
-        output,
-        toBitmap: &bitmap,
-        rowBytes: 4,
-        bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-        format: .RGBA8,
-        colorSpace: CGColorSpaceCreateDeviceRGB()
-    )
+    static func downscaled(from url: URL, maxDimension: CGFloat) -> UIImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [NSString: Any] = [
+            kCGImageSourceThumbnailMaxPixelSize: maxDimension,
+            kCGImageSourceCreateThumbnailFromImageAlways: true
+        ]
+        if let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) {
+            return UIImage(cgImage: cgImage)
+        }
+        return nil
+    }
 
-    let r = Float(bitmap[0]) / 255.0
-    let g = Float(bitmap[1]) / 255.0
-    let b = Float(bitmap[2]) / 255.0
-    let brightness = (r + g + b) / 3.0
-
-    if brightness < 0.05 { return true } // too dark
-    if abs(r - g) < 0.02 && abs(r - b) < 0.02 { return true } // too flat
-    return false
+    /// Save this image as JPEG in the app's Documents folder.
+    /// Returns the file path string if successful.
+    func saveToDocumentsAsJPEG(uuid: UUID, quality: CGFloat = 0.95) -> String? {
+        guard let jpegData = self.jpegData(compressionQuality: quality),
+              let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let url = docs.appendingPathComponent("\(uuid.uuidString).jpg")
+        do {
+            try jpegData.write(to: url)
+            return url.path
+        } catch {
+            print("❌ Failed to save JPEG:", error)
+            return nil
+        }
+    }
 }
-

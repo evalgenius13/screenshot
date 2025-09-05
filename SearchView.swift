@@ -3,51 +3,61 @@ import CoreData
 
 struct SearchView: View {
     @Environment(\.managedObjectContext) private var context
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \ScreenshotEntity.date, ascending: false)],
-        animation: .default
-    ) private var screenshots: FetchedResults<ScreenshotEntity>
-
+    
+    @State private var query = ""
+    @State private var results: [ScreenshotEntity] = []
     @State private var selectedIndex: Int? = nil
-    @State private var selectedGroup: [ScreenshotEntity] = []
 
-    private var groupedScreenshots: [(String, [ScreenshotEntity])] {
-        let dict = Dictionary(grouping: screenshots) { (s: ScreenshotEntity) -> String in
-            s.folder?.name ?? "Other"
-        }
-        return dict.keys.sorted().map { ($0, dict[$0] ?? []) }
-    }
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 4)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    ForEach(groupedScreenshots, id: \.0) { (categoryName, items) in
-                        if !items.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(categoryName)
-                                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                                    .foregroundColor(.primary)
-                                    .padding(.horizontal, 8)
+            VStack {
+                TextField("Search screenshots…", text: $query)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(.horizontal, 16)
+                    .onChange(of: query) { _ in performSearch() }
 
-                                LazyVGrid(columns: columns, spacing: 4) {
-                                    ForEach(items.indices, id: \.self) { index in
-                                        if let data = items[index].thumbnail,
-                                           let uiImage = UIImage(data: data),
-                                           !items[index].isLikelyTextScreenshot,
-                                           !isDarkOrFlat(uiImage) {
+                if query.isEmpty {
+                    Spacer()
+                    Text("Search by text or category")
+                        .foregroundColor(.secondary)
+                        .padding()
+                    Spacer()
+                } else {
+                    if results.isEmpty {
+                        Spacer()
+                        Text("No results found")
+                            .foregroundColor(.secondary)
+                            .padding()
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            LazyVGrid(columns: columns, spacing: 2) {
+                                ForEach(results.indices, id: \.self) { index in
+                                    let shot = results[index]
+                                    ZStack(alignment: .topLeading) {
+                                        if let data = shot.thumbnail,
+                                           let uiImage = UIImage(data: data) {
                                             Image(uiImage: uiImage)
                                                 .resizable()
                                                 .scaledToFill()
-                                                .frame(height: 90)
+                                                .frame(height: 140)
                                                 .clipped()
-                                                .onTapGesture {
-                                                    selectedIndex = index
-                                                    selectedGroup = items
-                                                }
+                                                .onTapGesture { selectedIndex = index }
+                                        } else {
+                                            Rectangle()
+                                                .fill(Color.secondary.opacity(0.2))
+                                                .frame(height: 140)
+                                        }
+                                        
+                                        if shot.status == "pending" {
+                                            Text("Scanning…")
+                                                .font(.caption2)
+                                                .padding(4)
+                                                .background(Color.yellow.opacity(0.8))
+                                                .cornerRadius(6)
+                                                .padding(6)
                                         }
                                     }
                                 }
@@ -55,17 +65,17 @@ struct SearchView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.top, 12)
             }
             .navigationTitle("Search")
-            .fullScreenCover(isPresented: Binding(
-                get: { selectedIndex != nil },
-                set: { if !$0 { selectedIndex = nil } }
-            )) {
+            .fullScreenCover(
+                isPresented: Binding(
+                    get: { selectedIndex != nil },
+                    set: { if !$0 { selectedIndex = nil } }
+                )
+            ) {
                 if let i = selectedIndex {
                     ScreenshotPreviewView(
-                        screenshots: selectedGroup,
+                        screenshots: results,
                         selectedIndex: Binding(
                             get: { i },
                             set: { selectedIndex = $0 }
@@ -73,6 +83,28 @@ struct SearchView: View {
                     )
                 }
             }
+        }
+    }
+
+    // MARK: - Search
+    private func performSearch() {
+        guard !query.isEmpty else {
+            results = []
+            return
+        }
+
+        let request: NSFetchRequest<ScreenshotEntity> = ScreenshotEntity.fetchRequest()
+        request.predicate = NSCompoundPredicate(orPredicateWithSubpredicates: [
+            NSPredicate(format: "ocrText CONTAINS[cd] %@", query),
+            NSPredicate(format: "folder.name CONTAINS[cd] %@", query)
+        ])
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \ScreenshotEntity.date, ascending: false)]
+
+        do {
+            results = try context.fetch(request)
+        } catch {
+            print("Search failed: \(error)")
+            results = []
         }
     }
 }

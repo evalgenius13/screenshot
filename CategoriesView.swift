@@ -3,7 +3,7 @@ import CoreData
 
 struct CategoriesView: View {
     @Environment(\.managedObjectContext) private var context
-
+    
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \CategoryEntity.sortOrder, ascending: true)],
         animation: .default
@@ -13,39 +13,14 @@ struct CategoriesView: View {
     @State private var showingRenameAlert: CategoryEntity? = nil
     @State private var newFolderName = ""
 
-    // ✅ Order: non-empty → empty → Other last
-    private var orderedCategories: [CategoryEntity] {
-        let nonEmpty = categories.filter { hasValidThumbnail($0) && $0.name != "Other" }
-        let empty = categories.filter { !hasValidThumbnail($0) && $0.name != "Other" }
-        let other = categories.filter { $0.name == "Other" }
-        return nonEmpty + empty + other
-    }
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 2)
-
     var body: some View {
         NavigationView {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 24) {
-                    ForEach(orderedCategories, id: \.self) { category in
-                        CategoryTile(category: category)
-                            .contextMenu {
-                                if !category.isSystem {
-                                    Button {
-                                        showingRenameAlert = category
-                                    } label: {
-                                        Label("Rename", systemImage: "pencil")
-                                    }
-
-                                    Button(role: .destructive) {
-                                        deleteCategory(category)
-                                    } label: {
-                                        Label("Delete Folder", systemImage: "trash")
-                                    }
-                                }
-                            }
-                    }
-                }
+                CategoriesGrid(
+                    categories: Array(categories),
+                    onRename: { showingRenameAlert = $0 },
+                    onDelete: deleteCategory
+                )
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
             }
@@ -57,57 +32,107 @@ struct CategoriesView: View {
                     }
                 }
             }
-            // Add Folder
             .alert("New Folder", isPresented: $showingAddAlert) {
                 TextField("Folder Name", text: $newFolderName)
-                Button("Add", action: addFolder)
+                Button("Add") { addCategory() }
                 Button("Cancel", role: .cancel) {}
             }
-            // Rename Folder
             .alert("Rename Folder", isPresented: Binding(
                 get: { showingRenameAlert != nil },
                 set: { if !$0 { showingRenameAlert = nil } }
             )) {
                 TextField("New Name", text: $newFolderName)
-                Button("Save") {
-                    if let folder = showingRenameAlert {
-                        folder.name = newFolderName
-                        try? context.save()
-                    }
-                    newFolderName = ""
-                }
+                Button("Save") { renameCategory() }
                 Button("Cancel", role: .cancel) {}
             }
         }
+        .onAppear {
+            if let category = showingRenameAlert {
+                newFolderName = category.name ?? ""
+            }
+        }
+        .onChange(of: showingRenameAlert) { category in
+            if let category = category {
+                newFolderName = category.name ?? ""
+            }
+        }
     }
-
-    // MARK: - Folder management
-    private func addFolder() {
-        guard !newFolderName.isEmpty else { return }
-        let folder = CategoryEntity(context: context)
-        folder.id = UUID()
-        folder.name = newFolderName
-        folder.isSystem = false
-        folder.sortOrder = Int64(categories.count + 1)
-        try? context.save()
-        newFolderName = ""
+    
+    // MARK: - Category Management
+    private func addCategory() {
+        let newCategory = CategoryEntity(context: context)
+        newCategory.id = UUID()
+        newCategory.name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newCategory.isSystem = false
+        newCategory.sortOrder = Int64(categories.count)
+        
+        do {
+            try context.save()
+            newFolderName = ""
+        } catch {
+            print("Failed to add category: \(error)")
+        }
     }
-
+    
+    private func renameCategory() {
+        guard let category = showingRenameAlert else { return }
+        category.name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            try context.save()
+            newFolderName = ""
+            showingRenameAlert = nil
+        } catch {
+            print("Failed to rename category: \(error)")
+        }
+    }
+    
     private func deleteCategory(_ category: CategoryEntity) {
         context.delete(category)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            print("Failed to delete category: \(error)")
+        }
     }
+}
 
-    private func hasValidThumbnail(_ category: CategoryEntity) -> Bool {
-        guard let screenshots = category.screenshots as? Set<ScreenshotEntity> else { return false }
-        return screenshots.contains { screenshot in
-            if screenshot.isLikelyTextScreenshot { return false }
-            if let data = screenshot.thumbnail,
-               let uiImage = UIImage(data: data),
-               !isDarkOrFlat(uiImage) {
-                return true
+// MARK: - Extracted Grid
+struct CategoriesGrid: View {
+    let categories: [CategoryEntity]
+    let onRename: (CategoryEntity) -> Void
+    let onDelete: (CategoryEntity) -> Void
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 2)
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 24) {
+            ForEach(categories, id: \.objectID) { category in
+                CategoryTileWrapper(
+                    category: category,
+                    onRename: { onRename(category) },
+                    onDelete: { onDelete(category) }
+                )
             }
-            return false
+        }
+    }
+}
+
+// MARK: - Wrapper for Context Menu
+struct CategoryTileWrapper: View {
+    let category: CategoryEntity
+    let onRename: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        NavigationLink(destination: CategoryDetailView(category: category)) {
+            CategoryTile(category: category)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .contextMenu {
+            if !category.isSystem {
+                Button(action: onRename) { Label("Rename", systemImage: "pencil") }
+                Button(role: .destructive, action: onDelete) { Label("Delete Folder", systemImage: "trash") }
+            }
         }
     }
 }
@@ -115,26 +140,15 @@ struct CategoriesView: View {
 // MARK: - Category Tile
 struct CategoryTile: View {
     let category: CategoryEntity
-    @State private var selectedIndex: Int? = nil
-    @State private var screenshotsArray: [ScreenshotEntity] = []
 
     var body: some View {
         VStack(spacing: 8) {
             if let screenshots = category.screenshots as? Set<ScreenshotEntity> {
-                let filtered = screenshots
-                    .filter { !$0.isLikelyTextScreenshot }
-                    .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
-                    .filter {
-                        if let data = $0.thumbnail,
-                           let uiImage = UIImage(data: data) {
-                            return !isDarkOrFlat(uiImage)
-                        }
-                        return false
-                    }
+                let sorted = screenshots.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
 
-                if let first = filtered.first,
+                if let first = sorted.first,
                    let data = first.thumbnail,
-                   let uiImage = UIImage(data: data) {
+                   let uiImage = UIImage.downscaled(from: data, maxDimension: 600) {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
@@ -142,18 +156,11 @@ struct CategoryTile: View {
                         .clipped()
                         .cornerRadius(12)
                         .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
-                        .onTapGesture {
-                            screenshotsArray = Array(filtered)
-                            selectedIndex = 0
-                        }
                 } else {
-                    // Gradient fallback
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(LinearGradient(
-                            colors: [.blue.opacity(0.4), .purple.opacity(0.4)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
+                        .fill(LinearGradient(colors: [.blue.opacity(0.4), .purple.opacity(0.4)],
+                                             startPoint: .topLeading,
+                                             endPoint: .bottomTrailing))
                         .frame(height: 160)
                         .overlay(
                             Text(category.name ?? "Folder")
@@ -169,20 +176,6 @@ struct CategoryTile: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
-        .fullScreenCover(isPresented: Binding(
-            get: { selectedIndex != nil },
-            set: { if !$0 { selectedIndex = nil } }
-        )) {
-            if let i = selectedIndex {
-                ScreenshotPreviewView(
-                    screenshots: screenshotsArray,
-                    selectedIndex: Binding(
-                        get: { i },
-                        set: { selectedIndex = $0 }
-                    )
-                )
-            }
-        }
     }
 }
 
