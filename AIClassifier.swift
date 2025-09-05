@@ -2,7 +2,7 @@ import Foundation
 
 class AIClassifier {
     static func classifyText(_ text: String, completion: @escaping (String) -> Void) {
-        guard let url = URL(string: "https://your-vercel-app-url.vercel.app/api/classify") else {
+        guard let url = URL(string: "https://screenshot-gamma-seven.vercel.app/api/classify") else {
             completion("Other")
             return
         }
@@ -28,7 +28,7 @@ class AIClassifier {
                 return
             }
 
-            // ✅ Validation step
+            // ✅ Validation step — only allow whitelisted categories
             if CATEGORY_LIST.contains(category) {
                 completion(category)
             } else {
@@ -38,3 +38,4 @@ class AIClassifier {
         }.resume()
     }
 }
+

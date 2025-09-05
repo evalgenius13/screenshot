@@ -1,30 +1,59 @@
 import SwiftUI
+import CoreData
 
 struct SettingsView: View {
     @Environment(\.managedObjectContext) private var context
-    @StateObject private var importer: ScreenshotImporter
 
-    init(context: NSManagedObjectContext) {
-        _importer = StateObject(wrappedValue: ScreenshotImporter(context: context))
+    // Importer is a lightweight helper — no need for @StateObject
+    private var importer: ScreenshotImporter {
+        ScreenshotImporter(context: context)
     }
 
     var body: some View {
-        Form {
-            Section(header: Text("Screenshots")) {
-                Button(role: .destructive) {
-                    importer.deleteAllScreenshots {
-                        importer.importScreenshots()
+        NavigationView {
+            Form {
+                Section(header: Text("Data")) {
+                    Button(role: .destructive) {
+                        resetDatabase()
+                    } label: {
+                        Label("Reset", systemImage: "arrow.clockwise")
                     }
-                } label: {
-                    Text("Reset & Reimport Screenshots")
+                }
+
+                Section(header: Text("Import")) {
+                    Button {
+                        importSampleScreenshot()
+                    } label: {
+                        Label("Import Sample Screenshot", systemImage: "square.and.arrow.down")
+                    }
                 }
             }
-
-            Section(header: Text("About")) {
-                Text("ScreenClean – TestFlight MVP")
-                Text("Version 1.0")
-            }
+            .navigationTitle("Settings")
         }
-        .navigationTitle("Settings")
+    }
+
+    // MARK: - Actions
+
+    private func resetDatabase() {
+        // Delete all screenshots
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = ScreenshotEntity.fetchRequest()
+        let batchDelete = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        _ = try? context.execute(batchDelete)
+
+        // Delete all categories
+        let categoryFetch: NSFetchRequest<NSFetchRequestResult> = CategoryEntity.fetchRequest()
+        let categoryDelete = NSBatchDeleteRequest(fetchRequest: categoryFetch)
+        _ = try? context.execute(categoryDelete)
+
+        try? context.save()
+    }
+
+    private func importSampleScreenshot() {
+        // Use a simple SF Symbol as a sample screenshot
+        if let sampleImage = UIImage(systemName: "photo"),
+           let data = sampleImage.jpegData(compressionQuality: 0.8) {
+            importer.importScreenshot(data: data, category: nil)
+        }
     }
 }
+

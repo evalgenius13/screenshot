@@ -6,36 +6,41 @@ struct ScreenshotDetailView: View {
     @State private var fullImage: UIImage? = nil
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            VStack {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
                 if let fullImage = fullImage {
                     Image(uiImage: fullImage)
                         .resizable()
                         .scaledToFit()
-                        .ignoresSafeArea()
+                        .cornerRadius(12)
+                        .shadow(radius: 4)
                 } else if let thumbData = screenshot.thumbnail,
                           let thumb = UIImage(data: thumbData) {
                     Image(uiImage: thumb)
                         .resizable()
                         .scaledToFit()
-                        .ignoresSafeArea()
+                        .cornerRadius(12)
+                        .shadow(radius: 4)
                         .onAppear { loadFullImage() }
                 } else {
                     ProgressView("Loading…")
                 }
 
-                // Debug category label
-                Text("Category: \(screenshot.category ?? "Unknown")")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                    .padding(.bottom, 8)
+                if let folder = screenshot.folder?.name {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Category")
+                            .font(.headline)
+                        Text(folder)
+                            .font(.body)
+                            .foregroundColor(.blue)
+                    }
+                }
             }
+            .padding()
         }
+        .background(Color(.systemBackground))
+        .navigationTitle("Screenshot")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Color.black, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
     }
 
     private func loadFullImage() {
@@ -60,3 +65,4 @@ struct ScreenshotDetailView: View {
         }
     }
 }
+

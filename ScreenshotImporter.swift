@@ -1,7 +1,6 @@
 import Foundation
-import Photos
-import UIKit
 import CoreData
+import UIKit
 
 class ScreenshotImporter {
     private let context: NSManagedObjectContext
@@ -10,74 +9,66 @@ class ScreenshotImporter {
         self.context = context
     }
 
-    /// Import all screenshots from the iOS "Screenshots" smart album
-    func importScreenshots() {
-        let screenshotsAlbum = PHAssetCollection.fetchAssetCollections(
-            with: .smartAlbum,
-            subtype: .smartAlbumScreenshots,
-            options: nil
-        )
+    /// Imports screenshot with thumbnail (Core Data) + full image (disk).
+    func importScreenshot(data: Data, category: CategoryEntity? = nil) {
+        let entity = ScreenshotEntity(context: context)
+        entity.id = UUID().uuidString
+        entity.date = Date()
+        entity.folder = category
 
-        guard let album = screenshotsAlbum.firstObject else {
-            print("⚠️ No screenshots album found")
-            return
+        // MARK: - Save full image to disk
+        let fileName = "\(entity.id).jpg"
+        let fileURL = ScreenshotImporter.fullImageDirectory.appendingPathComponent(fileName)
+
+        do {
+            try data.write(to: fileURL)
+            entity.fullImagePath = fileURL.path
+        } catch {
+            print("❌ Failed to save full screenshot: \(error)")
         }
 
-        let assets = PHAsset.fetchAssets(in: album, options: nil)
-        assets.enumerateObjects { asset, _, _ in
-            self.process(asset: asset)
+        // MARK: - Save thumbnail
+        if let uiImage = UIImage(data: data),
+           let thumbData = uiImage.asThumbnailData(maxDimension: 200) {
+            entity.thumbnail = thumbData
+        } else {
+            entity.thumbnail = data // fallback
+        }
+
+        do {
+            try context.save()
+        } catch {
+            print("❌ Failed to import screenshot: \(error.localizedDescription)")
         }
     }
 
-    /// Process a single screenshot PHAsset
-    private func process(asset: PHAsset) {
-        // Prevent duplicates by checking if we already saved this asset
-        let fetchRequest: NSFetchRequest<ScreenshotEntity> = ScreenshotEntity.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "id == %@", asset.localIdentifier)
+    /// Directory where full screenshots are stored
+    static var fullImageDirectory: URL = {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("FullScreenshots", isDirectory: true)
 
-        if let count = try? context.count(for: fetchRequest), count > 0 {
-            print("⏭ Skipping duplicate: \(asset.localIdentifier)")
-            return
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
+        return dir
+    }()
+}
 
-        let imageManager = PHImageManager.default()
-        let options = PHImageRequestOptions()
-        options.isSynchronous = true
-        options.deliveryMode = .highQualityFormat
+// MARK: - UIImage helper for thumbnails
+extension UIImage {
+    func asThumbnailData(maxDimension: CGFloat = 200) -> Data? {
+        let largestSide = max(size.width, size.height)
+        guard largestSide > 0 else { return nil }
 
-        imageManager.requestImageDataAndOrientation(for: asset, options: options) { data, _, _, _ in
-            guard let data = data, let uiImage = UIImage(data: data) else {
-                print("⚠️ Could not decode screenshot for asset \(asset.localIdentifier)")
-                return
-            }
+        let scale = maxDimension / largestSide
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
 
-            // Run OCR
-            OCRCategorizer.process(image: uiImage) { result in
-                guard let result = result else {
-                    print("⚠️ OCR failed for asset \(asset.localIdentifier)")
-                    return
-                }
+        UIGraphicsBeginImageContextWithOptions(newSize, true, 0)
+        self.draw(in: CGRect(origin: .zero, size: newSize))
+        let resized = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
 
-                // Classify with AI (via Vercel API)
-                AIClassifier.classifyText(result.text) { aiCategory in
-                    self.context.perform {
-                        let screenshot = ScreenshotEntity(context: self.context)
-                        screenshot.id = asset.localIdentifier
-                        screenshot.date = asset.creationDate ?? Date()
-                        screenshot.thumbnail = data
-                        screenshot.ocrText = result.text
-                        screenshot.category = aiCategory
-
-                        do {
-                            try self.context.save()
-                            print("✅ Saved screenshot: \(asset.localIdentifier) → \(aiCategory)")
-                        } catch {
-                            print("❌ Core Data save failed: \(error)")
-                        }
-                    }
-                }
-            }
-        }
+        return resized?.jpegData(compressionQuality: 0.7)
     }
 }
 

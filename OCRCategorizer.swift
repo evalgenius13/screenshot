@@ -1,10 +1,3 @@
-//
-//  OCRCategorizer.swift
-//  Screenshot
-//
-//  Created by Michael Carruthers on 9/3/25.
-//
-
 import Foundation
 import Vision
 import UIKit
@@ -16,34 +9,34 @@ struct OCRResult {
 }
 
 class OCRCategorizer {
-    
+
     /// Runs OCR on a UIImage and returns recognized text + category
     static func process(image: UIImage, completion: @escaping (OCRResult?) -> Void) {
         guard let cgImage = image.cgImage else {
             completion(nil)
             return
         }
-        
+
         let request = VNRecognizeTextRequest { request, error in
             guard error == nil else {
                 print("OCR failed: \(error!.localizedDescription)")
                 completion(nil)
                 return
             }
-            
+
             let observations = request.results as? [VNRecognizedTextObservation] ?? []
             let recognizedText = observations
                 .compactMap { $0.topCandidates(1).first?.string }
                 .joined(separator: " ")
-            
+
             let category = categorize(text: recognizedText)
             let result = OCRResult(text: recognizedText, category: category)
             completion(result)
         }
-        
+
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
-        
+
         let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         do {
             try requestHandler.perform([request])
@@ -52,11 +45,15 @@ class OCRCategorizer {
             completion(nil)
         }
     }
-    
-    /// Very basic rule-based categorization
+
+    // Keep the original rule-based categorizer but expose a simple public API for fallbacks
+    static func simpleCategorize(_ text: String) -> String {
+        return categorize(text: text)
+    }
+
+    // Internal rules remain the same
     private static func categorize(text: String) -> String {
         let lower = text.lowercased()
-        
         if lower.contains("recipe") || lower.contains("tsp") || lower.contains("cup") {
             return "Recipes"
         } else if lower.contains("meme") || lower.contains("😂") || lower.contains("lol") {
@@ -70,4 +67,3 @@ class OCRCategorizer {
         }
     }
 }
-
