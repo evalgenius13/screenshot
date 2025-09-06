@@ -1,66 +1,111 @@
 import SwiftUI
-import CoreData
 
 struct ScreenshotDetailView: View {
-    let screenshot: ScreenshotEntity
+    @ObservedObject var screenshot: ScreenshotEntity
+    @Environment(\.dismiss) private var dismiss
+    @State private var showChrome: Bool = true
+    var allScreenshots: [ScreenshotEntity]
+    @State private var currentIndex: Int = 0
 
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                if let image = loadFullImage(for: screenshot) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .cornerRadius(12)
-                        .shadow(radius: 4)
-                } else {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: 250)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .font(.largeTitle)
-                                .foregroundColor(.gray)
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Details")
-                        .font(.headline)
-
-                    Text("ID: \(screenshot.id?.uuidString ?? "unknown")")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-
-                    if let date = screenshot.date {
-                        Text("Date: \(date.formatted(date: .long, time: .shortened))")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-
-                    if let folderName = screenshot.folder?.name {
-                        Text("Folder: \(folderName)")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
-
-                Spacer()
-            }
-            .padding()
+    init(screenshot: ScreenshotEntity, allScreenshots: [ScreenshotEntity]) {
+        self.screenshot = screenshot
+        self.allScreenshots = allScreenshots
+        if let index = allScreenshots.firstIndex(of: screenshot) {
+            _currentIndex = State(initialValue: index)
         }
-        .navigationTitle("Screenshot")
-        .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func loadFullImage(for screenshot: ScreenshotEntity) -> UIImage? {
-        guard let path = screenshot.fullImagePath else { return nil }
-        let url = URL(fileURLWithPath: path)
-        return UIImage.downscaled(from: url, maxDimension: 1200)
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            // Screenshot(s) with swipe support
+            if !allScreenshots.isEmpty {
+                TabView(selection: $currentIndex) {
+                    ForEach(allScreenshots.indices, id: \.self) { index in
+                        screenshotImage(for: allScreenshots[index])
+                            .tag(index)
+                            .onTapGesture {
+                                withAnimation { showChrome.toggle() }
+                            }
+                    }
+                }
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+            } else {
+                screenshotImage(for: screenshot)
+                    .onTapGesture {
+                        withAnimation { showChrome.toggle() }
+                    }
+            }
+
+            // Top chrome overlay
+            if showChrome {
+                VStack {
+                    HStack {
+                        Button(action: { dismiss() }) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundColor(.blue)
+                        }
+                        Spacer()
+                        if let date = screenshot.date {
+                            Text(date, style: .date)
+                                .foregroundColor(.primary)
+                                .font(.subheadline)
+                        }
+                        Spacer()
+                        Button(action: {}) {
+                            Image(systemName: "ellipsis")
+                                .rotationEffect(.degrees(90))
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+                    .frame(height: 50)
+                    .background(.ultraThinMaterial)
+                    .ignoresSafeArea(edges: .top)
+
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .statusBar(hidden: !showChrome) // Hide status bar when chrome is hidden
+        .onAppear {
+            if let index = allScreenshots.firstIndex(of: screenshot) {
+                currentIndex = index
+            }
+        }
+    }
+
+    // MARK: - Screenshot image renderer
+    private func screenshotImage(for entity: ScreenshotEntity) -> some View {
+        Group {
+            if let path = entity.fullImagePath,
+               let image = UIImage(contentsOfFile: path) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else if let thumbData = entity.thumbnail,
+                      let thumb = UIImage(data: thumbData) {
+                Image(uiImage: thumb)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                Image(systemName: "photo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 200, height: 200)
+                    .foregroundColor(.gray)
+            }
+        }
+        .background(Color.black)
+        .ignoresSafeArea()
     }
 }
 

@@ -1,32 +1,34 @@
 import SwiftUI
-import CoreData
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var context
-    @EnvironmentObject private var store: CategoryStore
+    @EnvironmentObject var nav: AppNavigation   // Global navigation state
 
     var body: some View {
-        TabView {
-            HomeView()
-                .tabItem {
-                    Label("Home", systemImage: "house")
-                }
+        ZStack(alignment: .bottom) {
+            // Switch screens based on current tab
+            switch nav.currentTab {
+            case .recents:
+                RecentsView()
+            case .categories:
+                CategoriesView()
+            case .search:
+                SearchView()
+            case .settings:
+                SettingsView()
+            }
 
-            CategoriesView()
-                .tabItem {
-                    Label("Categories", systemImage: "folder")
-                }
-
-            SearchView()
-                .tabItem {
-                    Label("Search", systemImage: "magnifyingglass")
-                }
-
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gear")
-                }
+            // Bottom menu (always present)
+            PhotoStyleAppMenu()
         }
+        .navigationBarHidden(true)
+    }
+}
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+            .environmentObject(AppNavigation()) // ✅ needed for previews
+            .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
     }
 }
 
