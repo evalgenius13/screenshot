@@ -6,9 +6,9 @@ const openai = new OpenAI({
 });
 
 const categories = [
-  "Food", "Quotes", "Music", "Sports",
-  "News", "Events", "Work", "Travel",
-  "Shopping", "Health", "Finance", "Other"
+  "Food", "Fashion", "Home", "Beauty",
+  "Fitness", "Education", "Quotes", "Music",
+  "Entertainment", "Art", "Travel", "Other"
 ];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -24,18 +24,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // fast + cheap
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: `You are a classifier. Categorize the following text into exactly ONE of these categories: ${categories.join(", ")}. Return only the category name.`
+          content: `Classify this text into exactly ONE category: ${categories.join(", ")}.
+
+          Weighting guidelines for context-based classification:
+          
+          • Food - recipes, restaurants, cooking, ingredients, meals, beverages
+          • Fashion - clothing, accessories, style, brands, outfits, shopping for apparel
+          • Home - decor, furniture, interior design, household items, real estate
+          • Beauty - cosmetics, skincare, hair care, makeup, beauty routines
+          • Fitness - exercise, workouts, health apps, gym content, medical/health info
+          • Education - learning, news, business, finance, tutorials, how-to content
+          • Quotes - inspirational text, motivational sayings, meaningful phrases
+          • Music - songs, artists, albums, concerts, music apps, audio content
+          • Entertainment - movies, TV, games, sports, YouTube, social media, events
+          • Art - visual arts, creativity, design, photography, artistic content
+          • Travel - maps, transportation, trips, locations, hotels, navigation
+          • Other - anything that doesn't clearly fit the above categories
+          
+          Classify based on the primary content meaning, not rigid rules. 
+          Return only the category name.`
         },
         {
           role: "user",
           content: text,
         },
       ],
-      max_tokens: 10,
+      max_tokens: 15,
       temperature: 0,
     });
 
@@ -50,4 +68,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ category: "Other" });
   }
 }
-
